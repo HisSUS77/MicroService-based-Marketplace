@@ -18,13 +18,13 @@ const dbConfig = {
   max: 20, // Maximum number of clients in pool
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: true,
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: false,
   } : false,
 };
 
 // Create connection pool
-const pool = new Pool(dbConfig);
+export const pool = new Pool(dbConfig);
 
 // Test connection
 pool.on('connect', () => {

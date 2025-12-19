@@ -14,6 +14,7 @@ dotenv.config();
 import { configureHelmet, configureCORS, rateLimiter, logSecurityEvents } from '../../shared/middleware/security.js';
 import { errorHandler, notFoundHandler } from '../../shared/middleware/errorHandler.js';
 import { logger } from '../../shared/utils/logger.js';
+import { initializeDatabase } from './config/database.js';
 
 import orderRoutes from './routes/order.routes.js';
 import healthRoutes from './routes/health.routes.js';
@@ -24,7 +25,8 @@ const PORT = process.env.PORT || 3003;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const logsDir = path.join(__dirname, '..', '..', '..', 'logs');
+// Create logs directory in service folder
+const logsDir = path.join(__dirname, '..', 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
@@ -63,8 +65,13 @@ app.get('/', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  logger.info(`Order Service started on port ${PORT}`);
+initializeDatabase().then(() => {
+  app.listen(PORT, () => {
+    logger.info(`Order Service started on port ${PORT}`);
+  });
+}).catch((error) => {
+  logger.error('Failed to initialize database', { error: error.message });
+  process.exit(1);
 });
 
 process.on('SIGTERM', () => {

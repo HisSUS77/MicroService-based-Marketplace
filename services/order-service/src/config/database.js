@@ -30,10 +30,25 @@ export async function initializeDatabase() {
       product_id UUID NOT NULL,
       quantity INTEGER NOT NULL CHECK (quantity > 0),
       total_amount DECIMAL(10, 2) NOT NULL,
+      shipping_address TEXT,
       status VARCHAR(50) DEFAULT 'PENDING',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  
+  // Add shipping_address column if it doesn't exist (for existing tables)
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'shipping_address'
+      ) THEN
+        ALTER TABLE orders ADD COLUMN shipping_address TEXT;
+      END IF;
+    END $$;
+  `);
+  
   await query('CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id)');
   logger.info('Order database initialized');
 }

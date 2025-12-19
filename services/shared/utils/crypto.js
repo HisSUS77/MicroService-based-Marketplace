@@ -6,7 +6,21 @@
 
 import crypto from 'crypto';
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+// Generate or use provided encryption key (must be 32 bytes for AES-256)
+let ENCRYPTION_KEY;
+if (process.env.ENCRYPTION_KEY) {
+  // If env var is set, convert from hex string to Buffer
+  ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+  // Ensure it's exactly 32 bytes
+  if (ENCRYPTION_KEY.length !== 32) {
+    console.warn('ENCRYPTION_KEY is not 32 bytes, generating new key');
+    ENCRYPTION_KEY = crypto.randomBytes(32);
+  }
+} else {
+  // Generate a random 32-byte key
+  ENCRYPTION_KEY = crypto.randomBytes(32);
+}
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const SALT_LENGTH = 64;
@@ -24,7 +38,7 @@ export function encrypt(text) {
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv(
       ALGORITHM,
-      Buffer.from(ENCRYPTION_KEY, 'hex'),
+      ENCRYPTION_KEY,
       iv
     );
     
@@ -34,6 +48,7 @@ export function encrypt(text) {
     
     return `${iv.toString('hex')}:${authTag}:${encrypted}`;
   } catch (error) {
+    console.error('Encryption error:', error);
     throw new Error('Encryption failed');
   }
 }
@@ -56,7 +71,7 @@ export function decrypt(encryptedData) {
     
     const decipher = crypto.createDecipheriv(
       ALGORITHM,
-      Buffer.from(ENCRYPTION_KEY, 'hex'),
+      ENCRYPTION_KEY,
       iv
     );
     
@@ -66,6 +81,7 @@ export function decrypt(encryptedData) {
     
     return decrypted;
   } catch (error) {
+    console.error('Decryption error:', error);
     throw new Error('Decryption failed');
   }
 }

@@ -17,6 +17,7 @@ dotenv.config();
 import { configureHelmet, configureCORS, rateLimiter, logSecurityEvents } from '../../shared/middleware/security.js';
 import { errorHandler, notFoundHandler } from '../../shared/middleware/errorHandler.js';
 import { logger } from '../../shared/utils/logger.js';
+import { initializeDatabase } from './config/database.js';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
@@ -30,8 +31,8 @@ const PORT = process.env.PORT || 3001;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '..', '..', '..', 'logs');
+// Create logs directory in service folder
+const logsDir = path.join(__dirname, '..', 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
@@ -86,12 +87,17 @@ app.use(notFoundHandler);
 // Global error handler
 app.use(errorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  logger.info(`Auth Service started on port ${PORT}`, {
-    environment: process.env.NODE_ENV,
-    pid: process.pid,
+// Initialize database and start server
+initializeDatabase().then(() => {
+  app.listen(PORT, () => {
+    logger.info(`Auth Service started on port ${PORT}`, {
+      environment: process.env.NODE_ENV,
+      pid: process.pid,
+    });
   });
+}).catch((error) => {
+  logger.error('Failed to initialize database', { error: error.message });
+  process.exit(1);
 });
 
 // Graceful shutdown

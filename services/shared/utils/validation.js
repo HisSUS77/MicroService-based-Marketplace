@@ -56,7 +56,7 @@ export const validationSchemas = {
     },
   },
   order: {
-    productId: {
+    product_id: {
       required: true,
       type: 'uuid',
     },
@@ -66,9 +66,20 @@ export const validationSchemas = {
       min: 1,
       max: 1000,
     },
+    shipping_address: {
+      required: true,
+      type: 'string',
+      minLength: 5,
+      maxLength: 500,
+    },
+    total_amount: {
+      required: false,
+      type: 'number',
+      min: 0,
+    },
   },
   payment: {
-    orderId: {
+    order_id: {
       required: true,
       type: 'uuid',
     },
@@ -78,9 +89,23 @@ export const validationSchemas = {
       min: 0,
       max: 1000000,
     },
-    cardNumber: {
+    payment_method: {
+      required: true,
+      type: 'string',
+    },
+    card_number: {
       required: true,
       type: 'creditcard',
+    },
+    cvv: {
+      required: true,
+      type: 'string',
+      minLength: 3,
+      maxLength: 4,
+    },
+    expiry_date: {
+      required: true,
+      type: 'string',
     },
   },
 };
@@ -173,10 +198,12 @@ export function validateInput(data, schema) {
         break;
 
       case 'uuid':
-        if (!validator.isUUID(value)) {
+        // Accept any UUID version or UUID-like format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (typeof value !== 'string' || !uuidRegex.test(value)) {
           errors.push(`${field} must be a valid UUID`);
         } else {
-          sanitized[field] = value;
+          sanitized[field] = value.toLowerCase();
         }
         break;
 

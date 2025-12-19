@@ -17,10 +17,10 @@ const createOrder = asyncHandler(async (req, res) => {
     throw new ValidationError('Validation failed', validation.errors);
   }
 
-  const { productId, quantity } = validation.sanitized;
+  const { product_id, quantity, shipping_address } = validation.sanitized;
 
   // Fetch product details
-  const productResponse = await axios.get(`${PRODUCT_SERVICE_URL}/products/${productId}`);
+  const productResponse = await axios.get(`${PRODUCT_SERVICE_URL}/products/${product_id}`);
   const product = productResponse.data.data.product;
 
   if (!product) {
@@ -35,9 +35,10 @@ const createOrder = asyncHandler(async (req, res) => {
 
   const order = await orderModel.create({
     userId: req.user.userId,
-    productId,
+    productId: product_id,
     quantity,
     totalAmount,
+    shippingAddress: shipping_address,
   });
 
   logDataAccess(req.user.userId, 'order', 'create');

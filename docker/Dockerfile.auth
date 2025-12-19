@@ -3,11 +3,15 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy and install shared dependencies first
+COPY shared/package*.json ./shared/
+WORKDIR /app/shared
+RUN npm install --only=production
 
-# Install dependencies
-RUN npm ci --only=production
+# Copy and install auth-service dependencies
+WORKDIR /app/auth-service
+COPY auth-service/package*.json ./
+RUN npm install --only=production
 
 # Production stage
 FROM node:20-alpine
@@ -17,14 +21,16 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 WORKDIR /app
 
-# Copy dependencies from builder
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+# Copy shared module with its node_modules
+COPY --chown=nodejs:nodejs shared ./shared
+COPY --from=builder --chown=nodejs:nodejs /app/shared/node_modules ./shared/node_modules
 
-# Copy shared utilities
-COPY --chown=nodejs:nodejs ../shared ./shared
+# Copy auth-service with its node_modules
+COPY --chown=nodejs:nodejs auth-service ./auth-service
+COPY --from=builder --chown=nodejs:nodejs /app/auth-service/node_modules ./auth-service/node_modules
 
-# Copy application code
-COPY --chown=nodejs:nodejs . .
+# Set working directory to auth-service
+WORKDIR /app/auth-service
 
 # Set user
 USER nodejs

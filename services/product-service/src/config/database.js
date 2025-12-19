@@ -16,10 +16,10 @@ const dbConfig = {
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 };
 
-const pool = new Pool(dbConfig);
+export const pool = new Pool(dbConfig);
 
 pool.on('connect', () => {
   logger.info('Product database connection established');

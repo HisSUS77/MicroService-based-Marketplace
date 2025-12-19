@@ -1,11 +1,11 @@
 import { query } from '../config/database.js';
 
 async function create(orderData) {
-  const { userId, productId, quantity, totalAmount } = orderData;
+  const { userId, productId, quantity, totalAmount, shippingAddress } = orderData;
   const result = await query(
-    `INSERT INTO orders (user_id, product_id, quantity, total_amount, status)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [userId, productId, quantity, totalAmount, 'PENDING']
+    `INSERT INTO orders (user_id, product_id, quantity, total_amount, shipping_address, status)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [userId, productId, quantity, totalAmount, shippingAddress || '', 'PENDING']
   );
   return result.rows[0];
 }

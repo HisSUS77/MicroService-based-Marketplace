@@ -14,23 +14,23 @@ const processPayment = asyncHandler(async (req, res) => {
     throw new ValidationError('Validation failed', validation.errors);
   }
 
-  const { orderId, amount, cardNumber } = validation.sanitized;
+  const { order_id, amount, card_number } = validation.sanitized;
 
   // Check if payment already exists for this order
-  const existingPayment = await paymentModel.findByOrderId(orderId);
+  const existingPayment = await paymentModel.findByOrderId(order_id);
   if (existingPayment) {
     throw new ValidationError('Payment already processed for this order');
   }
 
   // Encrypt card number (AES-256-GCM)
-  const encryptedCard = encrypt(cardNumber);
+  const encryptedCard = encrypt(card_number);
 
   // Generate mock transaction ID
   const transactionId = `TXN-${generateToken(16)}`;
 
   // Mock payment processing - always succeeds for demo
   const payment = await paymentModel.create({
-    orderId,
+    orderId: order_id,
     userId: req.user.userId,
     amount,
     encryptedCard,
@@ -40,7 +40,7 @@ const processPayment = asyncHandler(async (req, res) => {
 
   logSecurityEvent('PAYMENT_PROCESSED', {
     userId: req.user.userId,
-    orderId,
+    orderId: order_id,
     amount,
     transactionId,
   }, 'info');

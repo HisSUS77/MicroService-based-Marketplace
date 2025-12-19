@@ -1,0 +1,15 @@
+{
+  "name": "marketplace-shared",
+  "version": "1.0.0",
+  "description": "Shared utilities and middleware for marketplace services",
+  "type": "module",
+  "dependencies": {
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "express-mongo-sanitize": "^2.2.0",
+    "validator": "^13.11.0",
+    "winston": "^3.11.0",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

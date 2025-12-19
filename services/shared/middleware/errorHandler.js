@@ -34,10 +34,14 @@ export function errorHandler(err, req, res, next) {
     timestamp: new Date().toISOString(),
   };
 
+  // Include validation details if available
+  if (err.details && Array.isArray(err.details) && err.details.length > 0) {
+    errorResponse.details = err.details;
+  }
+
   // Include stack trace only in development
   if (isDevelopment) {
     errorResponse.stack = err.stack;
-    errorResponse.details = err.details;
   }
 
   // Send error response

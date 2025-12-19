@@ -1,17 +1,17 @@
 -- Initialize all databases
 
--- Auth Database
-CREATE DATABASE IF NOT EXISTS marketplace_auth;
-\c marketplace_auth;
+-- Check and create Auth Database
+SELECT 'CREATE DATABASE marketplace_auth'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'marketplace_auth')\gexec
 
--- Product Database
-CREATE DATABASE IF NOT EXISTS marketplace_products;
-\c marketplace_products;
+-- Check and create Product Database
+SELECT 'CREATE DATABASE marketplace_products'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'marketplace_products')\gexec
 
--- Order Database
-CREATE DATABASE IF NOT EXISTS marketplace_orders;
-\c marketplace_orders;
+-- Check and create Order Database
+SELECT 'CREATE DATABASE marketplace_orders'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'marketplace_orders')\gexec
 
--- Payment Database
-CREATE DATABASE IF NOT EXISTS marketplace_payments;
-\c marketplace_payments;
+-- Check and create Payment Database
+SELECT 'CREATE DATABASE marketplace_payments'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'marketplace_payments')\gexec

@@ -25,8 +25,8 @@ services:
   # Auth Service
   auth-service:
     build:
-      context: ../services/auth-service
-      dockerfile: ../../docker/Dockerfile.auth
+      context: ../services
+      dockerfile: ../docker/Dockerfile.auth
     container_name: auth-service
     environment:
       - NODE_ENV=production
@@ -55,8 +55,8 @@ services:
   # Product Service
   product-service:
     build:
-      context: ../services/product-service
-      dockerfile: ../../docker/Dockerfile.product
+      context: ../services
+      dockerfile: ../docker/Dockerfile.product
     container_name: product-service
     environment:
       - NODE_ENV=production
@@ -84,8 +84,8 @@ services:
   # Order Service
   order-service:
     build:
-      context: ../services/order-service
-      dockerfile: ../../docker/Dockerfile.order
+      context: ../services
+      dockerfile: ../docker/Dockerfile.order
     container_name: order-service
     environment:
       - NODE_ENV=production
@@ -112,8 +112,8 @@ services:
   # Payment Service
   payment-service:
     build:
-      context: ../services/payment-service
-      dockerfile: ../../docker/Dockerfile.payment
+      context: ../services
+      dockerfile: ../docker/Dockerfile.payment
     container_name: payment-service
     environment:
       - NODE_ENV=production
