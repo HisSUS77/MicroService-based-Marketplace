@@ -1,0 +1,41 @@
+{
+  "name": "secure-marketplace-platform",
+  "version": "1.0.0",
+  "description": "Secure Microservices-Based Online Marketplace - CYC386 Project",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install --workspaces",
+    "dev:auth": "npm run dev --workspace=services/auth-service",
+    "dev:product": "npm run dev --workspace=services/product-service",
+    "dev:order": "npm run dev --workspace=services/order-service",
+    "dev:payment": "npm run dev --workspace=services/payment-service",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:all": "npm run build --workspaces",
+    "test:all": "npm run test --workspaces",
+    "docker:build": "docker-compose -f docker/docker-compose.yml build",
+    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f docker/docker-compose.yml down",
+    "k8s:deploy": "kubectl apply -f k8s/",
+    "helm:install": "helm install marketplace ./helm/marketplace",
+    "security:scan": "npm run security:scan --workspaces"
+  },
+  "keywords": [
+    "microservices",
+    "security",
+    "marketplace",
+    "devsecops",
+    "zero-trust"
+  ],
+  "author": "COMSATS University - CYC386",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-security": "^2.1.0",
+    "prettier": "^3.1.1"
+  }
+}

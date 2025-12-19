@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: marketplace-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: securepassword123
+      POSTGRES_DB: marketplace
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - marketplace-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: ../../docker/Dockerfile.auth
+    container_name: auth-service
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=marketplace_auth
+      - DB_USER=postgres
+      - DB_PASSWORD=securepassword123
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-min-32-chars
+      - ENCRYPTION_KEY=your-encryption-key-must-be-32-bytes-hexencoded-change-prod
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Product Service
+  product-service:
+    build:
+      context: ../services/product-service
+      dockerfile: ../../docker/Dockerfile.product
+    container_name: product-service
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=marketplace_products
+      - DB_USER=postgres
+      - DB_PASSWORD=securepassword123
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-min-32-chars
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Order Service
+  order-service:
+    build:
+      context: ../services/order-service
+      dockerfile: ../../docker/Dockerfile.order
+    container_name: order-service
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=marketplace_orders
+      - DB_USER=postgres
+      - DB_PASSWORD=securepassword123
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-min-32-chars
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+      - PAYMENT_SERVICE_URL=http://payment-service:3004
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+  # Payment Service
+  payment-service:
+    build:
+      context: ../services/payment-service
+      dockerfile: ../../docker/Dockerfile.payment
+    container_name: payment-service
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=marketplace_payments
+      - DB_USER=postgres
+      - DB_PASSWORD=securepassword123
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-min-32-chars
+      - ENCRYPTION_KEY=your-encryption-key-must-be-32-bytes-hexencoded-change-prod
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: marketplace-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - auth-service
+      - product-service
+      - order-service
+      - payment-service
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+networks:
+  marketplace-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local

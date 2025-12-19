@@ -1,0 +1,75 @@
+/**
+ * Order Service Server
+ * Handles order creation and management
+ */
+
+import express from 'express';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+dotenv.config();
+
+import { configureHelmet, configureCORS, rateLimiter, logSecurityEvents } from '../../shared/middleware/security.js';
+import { errorHandler, notFoundHandler } from '../../shared/middleware/errorHandler.js';
+import { logger } from '../../shared/utils/logger.js';
+
+import orderRoutes from './routes/order.routes.js';
+import healthRoutes from './routes/health.routes.js';
+
+const app = express();
+const PORT = process.env.PORT || 3003;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const logsDir = path.join(__dirname, '..', '..', '..', 'logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+app.use(configureHelmet());
+app.use(configureCORS());
+app.use(logSecurityEvents);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(rateLimiter);
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    logger.http('Request completed', {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      duration: `${Date.now() - start}ms`,
+    });
+  });
+  next();
+});
+
+app.use('/health', healthRoutes);
+app.use('/orders', orderRoutes);
+
+app.get('/', (req, res) => {
+  res.json({
+    service: 'Order Service',
+    version: '1.0.0',
+    status: 'running',
+  });
+});
+
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+  logger.info(`Order Service started on port ${PORT}`);
+});
+
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received');
+  process.exit(0);
+});
+
+export default app;
