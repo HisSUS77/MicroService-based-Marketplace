@@ -1,0 +1,357 @@
+---
+# Falco - Runtime Security Monitoring
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: falco
+  namespace: monitoring
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: falco
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - namespaces
+  - pods
+  - replicationcontrollers
+  - replicasets
+  - services
+  - daemonsets
+  - deployments
+  - events
+  - configmaps
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources:
+  - daemonsets
+  - deployments
+  - replicasets
+  - statefulsets
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/healthz", "/healthz/*"]
+  verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: falco
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: falco
+subjects:
+- kind: ServiceAccount
+  name: falco
+  namespace: monitoring
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-config
+  namespace: monitoring
+data:
+  falco.yaml: |
+    rules_file:
+      - /etc/falco/falco_rules.yaml
+      - /etc/falco/falco_rules.local.yaml
+      - /etc/falco/k8s_audit_rules.yaml
+      - /etc/falco/custom_rules.yaml
+
+    json_output: true
+    json_include_output_property: true
+    log_stderr: true
+    log_syslog: false
+    log_level: info
+    priority: warning
+
+    # Output channels
+    outputs:
+      rate: 1
+      max_burst: 1000
+
+    syslog_output:
+      enabled: false
+
+    file_output:
+      enabled: true
+      keep_alive: false
+      filename: /var/log/falco/events.log
+
+    stdout_output:
+      enabled: true
+
+    # gRPC output for integration with SIEM
+    grpc:
+      enabled: true
+      bind_address: "0.0.0.0:5060"
+      threadiness: 8
+
+    # HTTP output for alerting
+    http_output:
+      enabled: true
+      url: "http://alertmanager:9093/api/v1/alerts"
+
+  custom_rules.yaml: |
+    # Custom Security Rules for Marketplace Application
+    
+    - rule: Unauthorized Process Execution in Container
+      desc: Detect unauthorized process execution in marketplace containers
+      condition: >
+        spawned_process and 
+        container and 
+        container.image.repository in (marketplace-services) and
+        not proc.name in (node, npm, sh, bash)
+      output: >
+        Unauthorized process executed in marketplace container 
+        (user=%user.name process=%proc.cmdline container=%container.name image=%container.image.repository)
+      priority: WARNING
+      tags: [container, process, marketplace]
+
+    - rule: Sensitive File Access
+      desc: Detect access to sensitive configuration files
+      condition: >
+        open_read and 
+        container and
+        fd.name in (/etc/passwd, /etc/shadow, /etc/hosts, .env, config.json) and
+        not proc.name in (node, cat, less)
+      output: >
+        Sensitive file accessed 
+        (user=%user.name file=%fd.name process=%proc.cmdline container=%container.name)
+      priority: WARNING
+      tags: [filesystem, security]
+
+    - rule: Crypto Mining Activity
+      desc: Detect potential cryptocurrency mining
+      condition: >
+        spawned_process and
+        proc.name in (xmrig, minerd, cpuminer, ethminer)
+      output: >
+        Potential crypto mining detected 
+        (process=%proc.cmdline user=%user.name container=%container.name)
+      priority: CRITICAL
+      tags: [malware, mining]
+
+    - rule: Shell Spawned in Container
+      desc: Detect shell execution in production containers
+      condition: >
+        spawned_process and 
+        container and
+        proc.name in (sh, bash, zsh) and
+        container.image.repository in (marketplace-services)
+      output: >
+        Shell spawned in production container 
+        (user=%user.name shell=%proc.name container=%container.name command=%proc.cmdline)
+      priority: WARNING
+      tags: [shell, container, security]
+
+    - rule: Suspicious Network Activity
+      desc: Detect connections to suspicious ports
+      condition: >
+        outbound and 
+        fd.sport in (4444, 5555, 6666, 7777, 8888, 9999) and
+        container
+      output: >
+        Suspicious outbound connection 
+        (connection=%fd.name port=%fd.sport container=%container.name process=%proc.cmdline)
+      priority: WARNING
+      tags: [network, security]
+
+    - rule: Package Manager Execution in Container
+      desc: Detect package manager execution in running containers
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (apt-get, yum, apk, npm, pip) and
+        not container.image.repository in (build)
+      output: >
+        Package manager executed in running container 
+        (process=%proc.cmdline container=%container.name user=%user.name)
+      priority: WARNING
+      tags: [container, package-manager]
+
+    - rule: Container Drift Detection
+      desc: Detect binary execution from tmp directories
+      condition: >
+        spawned_process and
+        container and
+        proc.pname in (sh, bash) and
+        (proc.cwd startswith /tmp or 
+         proc.cwd startswith /var/tmp or
+         proc.cwd startswith /dev/shm)
+      output: >
+        Process executed from temporary directory 
+        (process=%proc.cmdline directory=%proc.cwd container=%container.name)
+      priority: WARNING
+      tags: [container, drift]
+
+    - rule: Privilege Escalation Attempt
+      desc: Detect privilege escalation attempts
+      condition: >
+        spawned_process and
+        proc.name in (sudo, su, setuid) and
+        container
+      output: >
+        Privilege escalation attempt detected 
+        (process=%proc.cmdline user=%user.name container=%container.name)
+      priority: CRITICAL
+      tags: [privilege-escalation, security]
+
+    - rule: Write to System Directories
+      desc: Detect writes to system directories
+      condition: >
+        open_write and
+        container and
+        fd.name startswith /etc/ or
+        fd.name startswith /usr/ or
+        fd.name startswith /bin/ or
+        fd.name startswith /sbin/
+      output: >
+        Write to system directory detected 
+        (file=%fd.name process=%proc.cmdline container=%container.name)
+      priority: WARNING
+      tags: [filesystem, security]
+
+    - rule: Database Connection from Unexpected Source
+      desc: Detect database connections from non-service containers
+      condition: >
+        outbound and
+        fd.sport = 5432 and
+        not container.image.repository in (auth-service, product-service, order-service, payment-service)
+      output: >
+        Unexpected database connection 
+        (connection=%fd.name container=%container.name process=%proc.cmdline)
+      priority: WARNING
+      tags: [network, database, security]
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: monitoring
+  labels:
+    app: falco
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  template:
+    metadata:
+      labels:
+        app: falco
+    spec:
+      serviceAccountName: falco
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+      containers:
+      - name: falco
+        image: falcosecurity/falco:0.36.2
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        args:
+          - /usr/bin/falco
+          - --cri
+          - /run/containerd/containerd.sock
+          - -K
+          - /var/run/secrets/kubernetes.io/serviceaccount/token
+          - -k
+          - https://kubernetes.default
+          - -pk
+        volumeMounts:
+        - name: docker-socket
+          mountPath: /var/run/docker.sock
+        - name: containerd-socket
+          mountPath: /run/containerd/containerd.sock
+        - name: dev-fs
+          mountPath: /host/dev
+        - name: proc-fs
+          mountPath: /host/proc
+          readOnly: true
+        - name: boot-fs
+          mountPath: /host/boot
+          readOnly: true
+        - name: lib-modules
+          mountPath: /host/lib/modules
+          readOnly: true
+        - name: usr-fs
+          mountPath: /host/usr
+          readOnly: true
+        - name: etc-fs
+          mountPath: /host/etc
+          readOnly: true
+        - name: config
+          mountPath: /etc/falco
+        - name: falco-logs
+          mountPath: /var/log/falco
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        env:
+        - name: FALCO_GRPC_ENABLED
+          value: "true"
+        - name: FALCO_GRPC_BIND_ADDRESS
+          value: "0.0.0.0:5060"
+      volumes:
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+      - name: containerd-socket
+        hostPath:
+          path: /run/containerd/containerd.sock
+      - name: dev-fs
+        hostPath:
+          path: /dev
+      - name: proc-fs
+        hostPath:
+          path: /proc
+      - name: boot-fs
+        hostPath:
+          path: /boot
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      - name: usr-fs
+        hostPath:
+          path: /usr
+      - name: etc-fs
+        hostPath:
+          path: /etc
+      - name: config
+        configMap:
+          name: falco-config
+      - name: falco-logs
+        hostPath:
+          path: /var/log/falco
+          type: DirectoryOrCreate
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: falco
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: falco
+  ports:
+  - name: grpc
+    port: 5060
+    targetPort: 5060
+    protocol: TCP

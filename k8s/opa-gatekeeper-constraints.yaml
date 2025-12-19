@@ -1,0 +1,229 @@
+---
+# OPA Gatekeeper Constraint Template: Block Privileged Containers
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8spspprivilegedcontainer
+  annotations:
+    description: >-
+      Controls whether containers can run in privileged mode.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sPSPPrivilegedContainer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8spspprivilegedcontainer
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          c.securityContext.privileged
+          msg := sprintf("Privileged container is not allowed: %v", [c.name])
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+
+---
+# Constraint: Apply Privileged Container Policy to Marketplace Namespace
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPPrivilegedContainer
+metadata:
+  name: psp-privileged-container
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - marketplace
+
+---
+# OPA Gatekeeper Constraint Template: Require Labels
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("You must provide labels: %v", [missing])
+        }
+
+---
+# Constraint: Require Security Labels
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-security-labels
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet"]
+    namespaces:
+      - marketplace
+  parameters:
+    labels:
+      - "app"
+      - "version"
+      - "environment"
+
+---
+# OPA Gatekeeper Constraint Template: Block NodePort
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblocknodeport
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockNodePort
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblocknodeport
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.object.spec.type == "NodePort"
+          msg := "NodePort services are not allowed"
+        }
+
+---
+# Constraint: Block NodePort Services
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockNodePort
+metadata:
+  name: block-node-port
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Service"]
+    namespaces:
+      - marketplace
+
+---
+# OPA Gatekeeper Constraint Template: Require Resource Limits
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8scontainerresourcelimits
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sContainerResourceLimits
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8scontainerresourcelimits
+
+        missing_limits(container) {
+          not container.resources.limits.cpu
+        }
+
+        missing_limits(container) {
+          not container.resources.limits.memory
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          missing_limits(container)
+          msg := sprintf("Container %v must have cpu and memory limits defined", [container.name])
+        }
+
+---
+# Constraint: Enforce Resource Limits
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sContainerResourceLimits
+metadata:
+  name: container-resource-limits
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - marketplace
+
+---
+# OPA Gatekeeper Constraint Template: Allowed Repositories
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedrepos
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRepos
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            repos:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedrepos
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          satisfied := [good | repo = input.parameters.repos[_] ; good = startswith(container.image, repo)]
+          not any(satisfied)
+          msg := sprintf("Container %v has invalid image repository %v", [container.name, container.image])
+        }
+
+---
+# Constraint: Allowed Registries
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: allowed-repositories
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - marketplace
+  parameters:
+    repos:
+      - "ghcr.io/"
+      - "marketplaceacr.azurecr.io/"
+      - "docker.io/library/postgres"

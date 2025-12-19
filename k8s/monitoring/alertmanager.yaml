@@ -1,0 +1,241 @@
+---
+# Alertmanager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'alertmanager@marketplace.com'
+      smtp_auth_username: 'alertmanager@marketplace.com'
+      smtp_auth_password: 'your-app-password'
+      smtp_require_tls: true
+      slack_api_url: 'YOUR_SLACK_WEBHOOK_URL'
+
+    # Templates for notifications
+    templates:
+      - '/etc/alertmanager/templates/*.tmpl'
+
+    # Route tree
+    route:
+      receiver: 'default'
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      routes:
+        # Critical alerts go to PagerDuty and Slack
+        - match:
+            severity: critical
+          receiver: 'critical-alerts'
+          continue: true
+        
+        # Security alerts go to security team
+        - match:
+            category: security
+          receiver: 'security-team'
+          continue: true
+        
+        # Application errors
+        - match:
+            category: application
+          receiver: 'dev-team'
+        
+        # Performance alerts
+        - match:
+            category: performance
+          receiver: 'performance-team'
+
+    # Inhibition rules
+    inhibit_rules:
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal: ['alertname', 'cluster', 'service']
+
+    # Receivers
+    receivers:
+      - name: 'default'
+        email_configs:
+          - to: 'admin@marketplace.com'
+            headers:
+              Subject: '[Marketplace] {{ .GroupLabels.alertname }}'
+            html: |
+              {{ range .Alerts }}
+              <h3>Alert: {{ .Labels.alertname }}</h3>
+              <p>Severity: {{ .Labels.severity }}</p>
+              <p>Summary: {{ .Annotations.summary }}</p>
+              <p>Description: {{ .Annotations.description }}</p>
+              {{ end }}
+
+      - name: 'critical-alerts'
+        email_configs:
+          - to: 'oncall@marketplace.com,admin@marketplace.com'
+            headers:
+              Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        slack_configs:
+          - channel: '#alerts-critical'
+            title: 'Critical Alert: {{ .GroupLabels.alertname }}'
+            text: |
+              {{ range .Alerts }}
+              *Alert:* {{ .Labels.alertname }}
+              *Severity:* {{ .Labels.severity }}
+              *Summary:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              {{ end }}
+            send_resolved: true
+
+      - name: 'security-team'
+        email_configs:
+          - to: 'security@marketplace.com'
+            headers:
+              Subject: '[SECURITY] {{ .GroupLabels.alertname }}'
+        slack_configs:
+          - channel: '#security-alerts'
+            title: 'Security Alert: {{ .GroupLabels.alertname }}'
+            text: |
+              {{ range .Alerts }}
+              *Alert:* {{ .Labels.alertname }}
+              *Severity:* {{ .Labels.severity }}
+              *Summary:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              {{ end }}
+            send_resolved: true
+
+      - name: 'dev-team'
+        email_configs:
+          - to: 'dev-team@marketplace.com'
+            headers:
+              Subject: '[Application] {{ .GroupLabels.alertname }}'
+        slack_configs:
+          - channel: '#dev-alerts'
+            title: 'Application Alert: {{ .GroupLabels.alertname }}'
+            send_resolved: true
+
+      - name: 'performance-team'
+        slack_configs:
+          - channel: '#performance-alerts'
+            title: 'Performance Alert: {{ .GroupLabels.alertname }}'
+            send_resolved: true
+
+  templates.tmpl: |
+    {{ define "slack.title" }}
+    [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.alertname }}
+    {{ end }}
+
+    {{ define "slack.text" }}
+    {{ range .Alerts }}
+    *Alert:* {{ .Labels.alertname }} - `{{ .Labels.severity }}`
+    *Summary:* {{ .Annotations.summary }}
+    *Description:* {{ .Annotations.description }}
+    *Details:*
+      {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+      {{ end }}
+    {{ end }}
+    {{ end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+          - '--web.external-url=http://alertmanager:9093'
+          - '--cluster.advertise-address=0.0.0.0:9093'
+        ports:
+        - containerPort: 9093
+          name: http
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+        - name: storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config
+        configMap:
+          name: alertmanager-config
+      - name: storage
+        persistentVolumeClaim:
+          claimName: alertmanager-storage
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-storage
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: managed-premium
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: alertmanager
+  ports:
+  - name: http
+    port: 9093
+    targetPort: 9093
+    protocol: TCP

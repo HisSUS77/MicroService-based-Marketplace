@@ -1,0 +1,273 @@
+---
+# Kyverno Policy: Require Image Signature Verification
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signature
+  annotations:
+    policies.kyverno.io/title: Verify Image Signature
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Ensures all container images are signed and verified before deployment.
+spec:
+  validationFailureAction: enforce
+  background: false
+  rules:
+    - name: verify-signature
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      verifyImages:
+      - imageReferences:
+        - "*"
+        required: true
+        attestors:
+        - count: 1
+          entries:
+          - keys:
+              publicKeys: |-
+                -----BEGIN PUBLIC KEY-----
+                # Add your public key here
+                -----END PUBLIC KEY-----
+
+---
+# Kyverno Policy: Disallow Privileged Containers
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-containers
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/category: Pod Security Standards (Baseline)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Privileged mode disables most security mechanisms and must not be allowed.
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: privileged-containers
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: >-
+          Privileged mode is disallowed. The fields spec.containers[*].securityContext.privileged
+          and spec.initContainers[*].securityContext.privileged must be unset or set to `false`.
+        pattern:
+          spec:
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+
+---
+# Kyverno Policy: Require Non-Root Containers
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+  annotations:
+    policies.kyverno.io/title: Require Run As Non-Root User
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: run-as-non-root
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: >-
+          Running as root is not allowed. The field spec.securityContext.runAsNonRoot must be set to `true`.
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+
+---
+# Kyverno Policy: Require Resource Limits
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+  annotations:
+    policies.kyverno.io/title: Require Resource Limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: validate-resources
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: "CPU and memory resource limits are required."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"
+
+---
+# Kyverno Policy: Disallow Latest Image Tag
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: "Using 'latest' tag is not allowed."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
+
+---
+# Kyverno Policy: Require Read-Only Root Filesystem
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-ro-rootfs
+  annotations:
+    policies.kyverno.io/title: Require Read-Only Root Filesystem
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: readonly-root-filesystem
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: "Root filesystem must be read-only."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+
+---
+# Kyverno Policy: Restrict Image Registries
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: "Images must come from approved registries: ghcr.io, marketplaceacr.azurecr.io"
+        pattern:
+          spec:
+            containers:
+              - image: "ghcr.io/* | marketplaceacr.azurecr.io/*"
+
+---
+# Kyverno Policy: Require Security Context
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-security-context
+  annotations:
+    policies.kyverno.io/title: Require Security Context
+    policies.kyverno.io/category: Pod Security Standards
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: require-seccomp-profile
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: "Seccomp profile is required."
+        pattern:
+          spec:
+            securityContext:
+              seccompProfile:
+                type: "RuntimeDefault | Localhost"
+    - name: drop-capabilities
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - marketplace
+      validate:
+        message: "All capabilities must be dropped and only NET_BIND_SERVICE can be added back."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL

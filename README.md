@@ -116,14 +116,22 @@ A production-grade, cloud-native, microservices-based online marketplace backend
 - **SAST:** SonarQube
 - **DAST:** OWASP ZAP
 - **Container Scanning:** Trivy
-- **Policy Enforcement:** OPA/Kyverno
+- **IaC Scanning:** Checkov, Terraform Compliance
+- **Policy Enforcement:** Kyverno / OPA Gatekeeper
 - **Runtime Security:** Falco
+- **CIS Compliance:** Docker Bench Security, Kube-bench
 
 ### Monitoring
 - **Metrics:** Prometheus
 - **Visualization:** Grafana
-- **Logging:** Loki
+- **Logging:** Loki + Promtail
 - **Tracing:** Tempo
+- **Alerting:** Alertmanager
+
+### Secrets Management
+- **HashiCorp Vault** - Primary secrets backend
+- **Azure Key Vault** - Cloud-native alternative
+- **AWS KMS** - Encryption key management
 
 ## 🔒 Security Controls
 

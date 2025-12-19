@@ -46,6 +46,74 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
+  # IaC Security Scanning with Checkov
+  iac-security:
+    name: Infrastructure as Code Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform,dockerfile,kubernetes
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+          soft_fail: false
+      
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+      
+      - name: Terraform Compliance Check
+        if: hashFiles('iac/*.tf') != ''
+        run: |
+          pip install terraform-compliance
+          cd iac
+          terraform init
+          terraform plan -out=plan.out
+          terraform show -json plan.out > plan.json
+          terraform-compliance -p plan.json -f ../compliance-tests/
+
+  # CIS Benchmark Validation
+  cis-benchmarks:
+    name: CIS Benchmarks Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Docker Bench Security
+        run: |
+          docker run --rm --net host --pid host --userns host --cap-add audit_control \
+            -v /etc:/etc:ro \
+            -v /usr/bin/containerd:/usr/bin/containerd:ro \
+            -v /usr/bin/runc:/usr/bin/runc:ro \
+            -v /usr/lib/systemd:/usr/lib/systemd:ro \
+            -v /var/lib:/var/lib:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            --label docker_bench_security \
+            docker/docker-bench-security > docker-bench-results.txt || true
+      
+      - name: Upload Docker Bench results
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-bench-results
+          path: docker-bench-results.txt
+      
+      - name: Kube-bench (K8s CIS)
+        run: |
+          docker run --rm -v $(pwd):/host aquasec/kube-bench:latest \
+            --config-dir /host/k8s --benchmark cis-1.8 > kube-bench-results.txt || true
+      
+      - name: Upload Kube-bench results
+        uses: actions/upload-artifact@v3
+        with:
+          name: kube-bench-results
+          path: kube-bench-results.txt
+
   # Build and Test Services
   build-services:
     name: Build & Test Services
