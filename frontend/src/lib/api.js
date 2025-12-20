@@ -3,10 +3,15 @@ import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 
 // Service URLs - adjust based on environment
-const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:3001';
-const PRODUCT_SERVICE_URL = import.meta.env.VITE_PRODUCT_URL || 'http://localhost:3002';
-const ORDER_SERVICE_URL = import.meta.env.VITE_ORDER_URL || 'http://localhost:3003';
-const PAYMENT_SERVICE_URL = import.meta.env.VITE_PAYMENT_URL || 'http://localhost:3004';
+// Use window.location.hostname to automatically use the current host (EC2 IP)
+const BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost' 
+  : `http://${window.location.hostname}`;
+
+const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_URL || `${BASE_URL}:3001`;
+const PRODUCT_SERVICE_URL = import.meta.env.VITE_PRODUCT_URL || `${BASE_URL}:3002`;
+const ORDER_SERVICE_URL = import.meta.env.VITE_ORDER_URL || `${BASE_URL}:3003`;
+const PAYMENT_SERVICE_URL = import.meta.env.VITE_PAYMENT_URL || `${BASE_URL}:3004`;
 
 // Create axios instance with default config
 const createApiInstance = (baseURL) => axios.create({
