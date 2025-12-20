@@ -93,12 +93,17 @@ export function configureCORS() {
     const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
       'http://localhost:3000',
       'http://localhost:5173',
+      'http://localhost:8000',
     ];
 
     const origin = req.headers.origin;
     
-    if (allowedOrigins.includes(origin)) {
+    // In development/demo, allow all origins
+    if (process.env.NODE_ENV === 'production' && allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (process.env.NODE_ENV !== 'production') {
+      // Allow all origins in non-production
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
     }
 
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
