@@ -86,6 +86,69 @@ sudo systemctl restart docker
 print_success "Docker installed and configured"
 
 ################################################################################
+# Configure containerd for Kubernetes
+################################################################################
+
+print_info "Configuring containerd for Kubernetes..."
+
+# Create containerd config directory
+sudo mkdir -p /etc/containerd
+
+# Generate default containerd config
+containerd config default | sudo tee /etc/containerd/config.toml
+
+# Enable SystemdCgroup
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+# Restart containerd
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+
+# Verify containerd is running
+if ! sudo systemctl is-active --quiet containerd; then
+    print_error "containerd failed to start"
+    exit 1
+fi
+
+print_success "containerd configured and running"
+
+################################################################################
+# Load Required Kernel Modules
+################################################################################
+
+print_info "Loading required kernel modules..."
+
+# Load modules
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+# Persist modules on boot
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+print_success "Kernel modules loaded"
+
+################################################################################
+# Configure Sysctl for Kubernetes
+################################################################################
+
+print_info "Configuring sysctl parameters..."
+
+# Set sysctl parameters
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+# Apply sysctl params
+sudo sysctl --system
+
+print_success "Sysctl parameters configured"
+
+################################################################################
 # Disable Swap (Required for Kubernetes)
 ################################################################################
 
@@ -121,8 +184,12 @@ print_success "Kubernetes components installed"
 
 print_info "Initializing Kubernetes cluster..."
 
+# Verify containerd is ready
+print_info "Verifying container runtime..."
+sudo crictl --runtime-endpoint unix:///var/run/containerd/containerd.sock version
+
 # Initialize cluster
-sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=NumCPU,Mem
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket unix:///var/run/containerd/containerd.sock --ignore-preflight-errors=NumCPU,Mem
 
 # Setup kubeconfig for current user
 mkdir -p $HOME/.kube
