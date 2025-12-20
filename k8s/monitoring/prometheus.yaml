@@ -57,20 +57,6 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
-      external_labels:
-        cluster: 'marketplace-cluster'
-        environment: 'production'
-
-    # Alertmanager configuration
-    alerting:
-      alertmanagers:
-      - static_configs:
-        - targets:
-          - alertmanager:9093
-
-    # Load rules once and periodically evaluate them
-    rule_files:
-      - /etc/prometheus/rules/*.yml
 
     scrape_configs:
       # Prometheus itself
@@ -78,17 +64,44 @@ data:
         static_configs:
         - targets: ['localhost:9090']
 
-      # Kubernetes Nodes (CPU, Memory, Disk, Network)
+      # Kubernetes Nodes
       - job_name: 'kubernetes-nodes'
         kubernetes_sd_configs:
         - role: node
         scheme: https
         tls_config:
           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
         relabel_configs:
         - action: labelmap
           regex: __meta_kubernetes_node_label_(.+)
+
+      # Kubernetes Pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
 
       # Kubernetes cAdvisor (Container metrics)
       - job_name: 'kubernetes-cadvisor'
@@ -97,6 +110,7 @@ data:
         scheme: https
         tls_config:
           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
         relabel_configs:
         - action: labelmap
@@ -200,19 +214,13 @@ spec:
         app: prometheus
     spec:
       serviceAccountName: prometheus
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65534
-        fsGroup: 65534
       containers:
       - name: prometheus
         image: prom/prometheus:v2.48.0
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
           - '--storage.tsdb.path=/prometheus'
-          - '--storage.tsdb.retention.time=30d'
-          - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-          - '--web.console.templates=/usr/share/prometheus/consoles'
+          - '--storage.tsdb.retention.time=2h'
           - '--web.enable-lifecycle'
         ports:
         - containerPort: 9090
@@ -220,17 +228,15 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/prometheus
-        - name: rules
-          mountPath: /etc/prometheus/rules
         - name: storage
           mountPath: /prometheus
         resources:
           requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
             cpu: 500m
             memory: 1Gi
-          limits:
-            cpu: 2000m
-            memory: 4Gi
         livenessProbe:
           httpGet:
             path: /-/healthy
@@ -243,36 +249,12 @@ spec:
             port: 9090
           initialDelaySeconds: 5
           timeoutSeconds: 5
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
       volumes:
       - name: config
         configMap:
           name: prometheus-config
-      - name: rules
-        configMap:
-          name: prometheus-rules
       - name: storage
-        persistentVolumeClaim:
-          claimName: prometheus-storage
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: prometheus-storage
-  namespace: monitoring
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 50Gi
-  storageClassName: gp2
+        emptyDir: {}
 
 ---
 apiVersion: v1
