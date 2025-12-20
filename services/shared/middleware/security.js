@@ -13,6 +13,17 @@ import { logSecurityEvent } from '../utils/logger.js';
  * Configure Helmet for security headers
  */
 export function configureHelmet() {
+  // Disable CSP in non-production for easier development
+  if (process.env.NODE_ENV !== 'production') {
+    return helmet({
+      contentSecurityPolicy: false,
+      hsts: false,
+      frameguard: { action: 'deny' },
+      noSniff: true,
+      xssFilter: true,
+    });
+  }
+  
   return helmet({
     contentSecurityPolicy: {
       directives: {
@@ -20,6 +31,7 @@ export function configureHelmet() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", '*'], // Allow all connections in dev
       },
     },
     hsts: {
