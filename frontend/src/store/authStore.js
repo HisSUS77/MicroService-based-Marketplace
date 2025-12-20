@@ -3,7 +3,12 @@ import { persist } from 'zustand/middleware';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:3001';
+// Use dynamic hostname detection like api.js
+const BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost' 
+  : `http://${window.location.hostname}`;
+
+const API_URL = import.meta.env.VITE_AUTH_URL || `${BASE_URL}:3001`;
 
 export const useAuthStore = create(
   persist(
