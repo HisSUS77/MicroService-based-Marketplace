@@ -127,7 +127,7 @@ spec:
       resources:
         requests:
           storage: 50Gi
-      storageClassName: managed-premium
+      storageClassName: gp2
 
 ---
 apiVersion: v1

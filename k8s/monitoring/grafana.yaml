@@ -181,7 +181,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: managed-premium
+  storageClassName: gp2
 
 ---
 apiVersion: v1
