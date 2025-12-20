@@ -254,8 +254,15 @@ kubectl create -f https://github.com/kyverno/kyverno/releases/download/v1.11.0/i
 
 # Wait for Kyverno to be ready
 print_info "Waiting for Kyverno to be ready..."
-sleep 20
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kyverno -n kyverno --timeout=300s
+sleep 30
+
+# Wait for admission controller (most critical component)
+kubectl wait --for=condition=available deployment/kyverno-admission-controller -n kyverno --timeout=300s 2>/dev/null || {
+    print_warning "Kyverno admission controller taking longer to start, continuing..."
+}
+
+# Give it a bit more time for all components
+sleep 10
 
 # Apply custom policies
 if [ -f "$SCRIPT_DIR/k8s/kyverno-policies.yaml" ]; then

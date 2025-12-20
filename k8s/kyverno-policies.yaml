@@ -1,5 +1,6 @@
 ---
 # Kyverno Policy: Require Image Signature Verification
+# NOTE: Disabled for development - Enable in production with proper signing keys
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -11,7 +12,7 @@ metadata:
     policies.kyverno.io/description: >-
       Ensures all container images are signed and verified before deployment.
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: audit  # Changed from 'enforce' to 'audit' for development
   background: false
   rules:
     - name: verify-signature
@@ -22,17 +23,23 @@ spec:
               - Pod
             namespaces:
               - marketplace
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - monitoring
       verifyImages:
       - imageReferences:
-        - "*"
-        required: true
+        - "marketplace/*"  # Only verify custom marketplace images
+        required: false
         attestors:
         - count: 1
           entries:
           - keys:
               publicKeys: |-
                 -----BEGIN PUBLIC KEY-----
-                # Add your public key here
+                # Add your public key here for production
                 -----END PUBLIC KEY-----
 
 ---
